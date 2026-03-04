@@ -1,0 +1,4 @@
+example.com
+*.example.com
+https://api.example.com/v1
+http://sub.example.com:8080

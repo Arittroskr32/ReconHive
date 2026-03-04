@@ -1,0 +1,17 @@
+[project]
+name = "reconhive"
+version = "0.1.0"
+description = "Resumable recon workspace CLI"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+reconhive = "reconhive.cli:main"
+
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["reconhive*"]

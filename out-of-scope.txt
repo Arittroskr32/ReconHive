@@ -1,0 +1,3 @@
+dev.example.com
+*.internal.example.com
+https://admin.example.com/login
