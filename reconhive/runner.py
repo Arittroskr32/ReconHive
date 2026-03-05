@@ -18,12 +18,24 @@ class CommandRunner:
         self.log_path = log_path
         self.failures: list[str] = []
 
-    def run(self, command: list[str], cwd: Path | None = None) -> subprocess.CompletedProcess | None:
+    def run(
+        self,
+        command: list[str],
+        cwd: Path | None = None,
+        timeout: int | float | None = None,
+    ) -> subprocess.CompletedProcess | None:
         self._log(f"$ {' '.join(command)}")
         if self.dry_run:
             return None
         try:
-            result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False)
+            result = subprocess.run(command, cwd=cwd, capture_output=True, text=True, check=False, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            message = f"Command timed out ({timeout}s): {' '.join(command)}"
+            self._log(message)
+            if self.strict:
+                raise RuntimeError(message)
+            self.failures.append(message)
+            return None
         except OSError as exc:
             message = f"Failed to execute command: {' '.join(command)} ({exc})"
             self._log(message)

@@ -16,7 +16,7 @@ $archivePath = Join-Path $archiveDir 'ReconHive.zip'
 if (Test-Path $archivePath) { Remove-Item -Force $archivePath }
 
 $items = Get-ChildItem -Force | Where-Object {
-    $_.Name -notin @('.git', '.venv', 'venv', 'release')
+    $_.Name -notin @('.git', '.venv', 'venv', 'release', 'certinia')
 }
 
 Compress-Archive -Path $items.FullName -DestinationPath $archivePath -Force

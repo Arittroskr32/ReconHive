@@ -71,13 +71,26 @@ def mark_stage_finished(workspace: Path, state: dict[str, Any], stage: str, outp
     save_state(workspace, state)
 
 
-def mark_stage_failed(workspace: Path, state: dict[str, Any], stage: str, error: str) -> None:
+def mark_stage_failed(
+    workspace: Path,
+    state: dict[str, Any],
+    stage: str,
+    error: str,
+    outputs: list[str] | None = None,
+) -> None:
     stage_state = state["stages"].setdefault(stage, {})
     stage_state["ended"] = now_iso()
     stage_state["done"] = False
     stage_state["failed"] = True
     stage_state["error"] = error
-    stage_state["output_counts"] = {}
+
+    counts: dict[str, int] = {}
+    for relative in outputs or []:
+        file_path = workspace / relative
+        if file_path.exists() and file_path.is_file():
+            counts[relative] = _count_lines(file_path)
+
+    stage_state["output_counts"] = counts
     save_state(workspace, state)
 
 

@@ -12,6 +12,7 @@ dist/
 build/
 
 recon_runs/
+certinia/
 
 # Temporary stage inputs
 **/.resolve_input.txt

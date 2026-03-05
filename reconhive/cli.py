@@ -8,7 +8,20 @@ import shutil
 from .constants import OUTPUTS_BY_STAGE, STAGE_DESCRIPTIONS, STAGE_ORDER, TOOL_REQUIREMENTS
 from .runner import CommandRunner, command_exists, load_tool_overrides, resolve_tool_command
 from .scope import load_scope_json, parse_scope_files, save_scope_json
-from .stages import check_stage_dependencies, run_enum, run_live, run_resolve
+from .stages import (
+    check_stage_dependencies,
+    run_crawl,
+    run_enum,
+    run_js,
+    run_live,
+    run_params_content,
+    run_permute,
+    run_ports,
+    run_resolve,
+    run_scan,
+    run_tech,
+    run_visual,
+)
 from .workspace import (
     ensure_workspace_layout,
     init_state,
@@ -122,29 +135,46 @@ def _save_run_config(workspace: Path, args: argparse.Namespace) -> None:
     (workspace / "config/run_config.json").write_text(json.dumps(run_config, indent=2), encoding="utf-8")
 
 
-def _run_stage(workspace: Path, stage: str, args: argparse.Namespace) -> None:
+def _run_stage(workspace: Path, stage: str, args: argparse.Namespace) -> bool:
     scope_data = load_scope_json(workspace / "config/scope.json")
     state = load_state(workspace)
 
     if stage_done(state, stage) and not args.force:
         print(f"Skipping {stage}: already completed (use --force to rerun).")
-        return
+        return True
 
     dep_ok, dep_message = check_stage_dependencies(workspace, stage)
     if not dep_ok:
         print(f"Skipping {stage}: {dep_message}. Run previous stage first.")
-        return
+        return False
 
     runner = CommandRunner(dry_run=args.dry_run, strict=args.strict, log_path=workspace / "logs/reconhive.log")
     mark_stage_started(workspace, state, stage)
+    outputs = stage_outputs(stage)
 
     try:
         if stage == "enum":
             outputs = run_enum(workspace, scope_data, runner)
+        elif stage == "permute":
+            outputs = run_permute(workspace, scope_data, runner)
         elif stage == "resolve":
             outputs = run_resolve(workspace, scope_data, runner)
         elif stage == "live":
             outputs = run_live(workspace, scope_data, runner, args.threads, args.timeout, args.rate)
+        elif stage == "ports":
+            outputs = run_ports(workspace, scope_data, runner, args.rate, args.timeout, args.deep_nmap)
+        elif stage == "tech":
+            outputs = run_tech(workspace, scope_data, runner)
+        elif stage == "crawl":
+            outputs = run_crawl(workspace, scope_data, runner, args.threads, args.timeout)
+        elif stage == "js":
+            outputs = run_js(workspace, scope_data, runner, args.timeout)
+        elif stage == "params_content":
+            outputs = run_params_content(workspace, scope_data, runner)
+        elif stage == "visual":
+            outputs = run_visual(workspace, scope_data, runner, args.timeout)
+        elif stage == "scan":
+            outputs = run_scan(workspace, scope_data, runner, args.timeout, args.nuclei_severity)
         else:
             outputs = stage_outputs(stage)
             for rel in outputs:
@@ -160,17 +190,25 @@ def _run_stage(workspace: Path, stage: str, args: argparse.Namespace) -> None:
                 state,
                 stage,
                 f"{len(runner.failures)} tool failures. See logs/reconhive.log",
+                outputs,
             )
             print(f"Stage completed with failures: {stage}")
-            return
+            return False
         mark_stage_finished(workspace, state, stage, outputs)
         print(f"Stage completed: {stage}")
+        return True
+    except KeyboardInterrupt:
+        state = load_state(workspace)
+        mark_stage_failed(workspace, state, stage, "Interrupted by user", outputs)
+        print(f"Stage interrupted: {stage}")
+        raise
     except Exception as exc:
         state = load_state(workspace)
-        mark_stage_failed(workspace, state, stage, str(exc))
+        mark_stage_failed(workspace, state, stage, str(exc), outputs)
         print(f"Stage failed: {stage} -> {exc}")
         if args.strict:
             raise
+        return False
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -180,12 +218,17 @@ def cmd_run(args: argparse.Namespace) -> int:
 
     _save_run_config(workspace, args)
 
-    if args.stage == "all":
-        for stage in STAGE_ORDER:
-            _run_stage(workspace, stage, args)
-    else:
-        _run_stage(workspace, args.stage, args)
-    return 0
+    try:
+        if args.stage == "all":
+            all_ok = True
+            for stage in STAGE_ORDER:
+                all_ok = _run_stage(workspace, stage, args) and all_ok
+            return 0 if all_ok else 1
+
+        ok = _run_stage(workspace, args.stage, args)
+        return 0 if ok else 1
+    except KeyboardInterrupt:
+        return 130
 
 
 def cmd_stages() -> int:
